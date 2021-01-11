@@ -7,309 +7,338 @@
  */
 
 import {
-	Logger, ILoggerTarget, LOG_LEVEL, LoggerFacility,
-	ConsoleTarget, FileTarget, JsonFileTarget, GraylogTarget
+  Logger, ILoggerTarget, LOG_LEVEL, LoggerFacility,
+  ConsoleTarget, FileTarget, JsonFileTarget, GraylogTarget
 } from "../src/index";
 
 describe("Logger class", () => {
 
-	function mockTarget() {
+  function mockTarget() {
 
-		const target: ILoggerTarget = {
-			log: jest.fn(),
-			close: jest.fn(),
-			setLevel: jest.fn(),
-			getLevel: jest.fn()
-		};
+    const target: ILoggerTarget = {
+      log: jest.fn(),
+      close: jest.fn(),
+      setLevel: jest.fn(),
+      getLevel: jest.fn()
+    };
 
-		return target;
+    return target;
 
-	}
+  }
 
-	function mockLoggerWithTarget() {
+  function mockLoggerWithTarget() {
 
-		const logger = new Logger();
-		const target = mockTarget();
+    const logger = new Logger();
+    const target = mockTarget();
 
-		logger.to("trg", target);
+    logger.to("trg", target);
 
-		return {
-			logger: logger,
-			target: target
-		};
+    return {
+      logger: logger,
+      target: target
+    };
 
-	}
+  }
 
-	it("should construct", () => {
+  it("should construct", () => {
 
-		const logger = new Logger();
+    const logger = new Logger();
 
-		expect(logger).toBeInstanceOf(Logger);
+    expect(logger).toBeInstanceOf(Logger);
 
-	});
+  });
 
-	it("should construct with configuration", () => {
+  it("should construct with filters", () => {
 
-		const logger = new Logger({
-			level: LOG_LEVEL.WARN
-		});
+    const logger = new Logger({ filters: "*,name,-not" });
+    expect(logger.getFilters().toString()).toEqual("/.*/,/name/,/!(not)/");
 
-		expect(logger).toBeInstanceOf(Logger);
-		expect(logger.getLevel()).toEqual(LOG_LEVEL.WARN);
+  });
 
-	});
+  it.only("should filter facilities with matching pattern", () => {
 
-	it("should assign logging target(s)", () => {
+    const logger = new Logger({ filters: "*,a" });
+    logger.facility("a");
+    logger.facility("b");
+    logger.facility("c");
 
-		const logger = new Logger();
-		const target = mockTarget();
+    expect(logger.getFilteredFacilities()).toEqual(["a"]);
 
-		logger.to("trg1", target);
-		logger.to("trg2", target);
+  });
 
-		expect(logger.getAllTargets()).toEqual({
-			trg1: target,
-			trg2: target
-		});
+  it.only("should filter facilities negating pattern", () => {
 
-	});
+    const logger = new Logger({ filters: "*,-b" });
+    logger.facility("a");
+    logger.facility("b");
+    logger.facility("c");
 
-	it("#getTarget should return target by it's id", () => {
+    expect(logger.getFilteredFacilities()).toEqual(["a", "c"]);
+    
+  });
 
-		const logger = new Logger();
-		const target = mockTarget();
+  it("should construct with configuration", () => {
 
-		logger.to("trg1", target);
-		logger.to("trg2", target);
+    const logger = new Logger({
+      level: LOG_LEVEL.WARN
+    });
 
-		expect(logger.getTarget("trg1")).toEqual(target);
+    expect(logger).toBeInstanceOf(Logger);
+    expect(logger.getLevel()).toEqual(LOG_LEVEL.WARN);
 
-	});
+  });
 
-	it("#_log should pass log message to all targets", () => {
+  it("should assign logging target(s)", () => {
 
-		const logger = new Logger();
-		const target = mockTarget();
+    const logger = new Logger();
+    const target = mockTarget();
 
-		logger.to("fn1", target);
-		logger.to("fn2", target);
+    logger.to("trg1", target);
+    logger.to("trg2", target);
 
-		logger._log(LOG_LEVEL.INFO, "facility", ["arg1", "arg2"]);
+    expect(logger.getAllTargets()).toEqual({
+      trg1: target,
+      trg2: target
+    });
 
-		expect(target.log).toHaveBeenCalledTimes(2);
-		expect(target.log).toHaveBeenLastCalledWith(LOG_LEVEL.INFO, "facility", ["arg1", "arg2"], {});
+  });
 
-	});
+  it("#getTarget should return target by it's id", () => {
 
-	it("#close should call #close method of all targets", () => {
+    const logger = new Logger();
+    const target = mockTarget();
 
-		const logger = new Logger();
-		const target = mockTarget();
+    logger.to("trg1", target);
+    logger.to("trg2", target);
 
-		logger.to("fn1", target);
-		logger.to("fn2", target);
+    expect(logger.getTarget("trg1")).toEqual(target);
 
-		logger.close();
+  });
 
-		expect(target.close).toHaveBeenCalledTimes(2);
+  it("#_log should pass log message to all targets", () => {
 
-	});
+    const logger = new Logger();
+    const target = mockTarget();
 
-	it("#facility should return facility wrapper", () => {
+    logger.to("fn1", target);
+    logger.to("fn2", target);
 
-		const logger = new Logger();
-		const target = mockTarget();
+    logger._log(LOG_LEVEL.INFO, "facility", ["arg1", "arg2"]);
 
-		logger.to("trg", target);
+    expect(target.log).toHaveBeenCalledTimes(2);
+    expect(target.log).toHaveBeenLastCalledWith(LOG_LEVEL.INFO, "facility", ["arg1", "arg2"], {});
 
-		const facility = logger.facility("fac");
+  });
 
-		// Check facility instance
-		expect(facility).toBeInstanceOf(LoggerFacility);
+  it("#close should call #close method of all targets", () => {
 
-		// Try to log something
-		facility.log(LOG_LEVEL.INFO, "arg1", "arg2");
+    const logger = new Logger();
+    const target = mockTarget();
 
-		expect(target.log).toHaveBeenCalledTimes(1);
-		expect(target.log).toHaveBeenLastCalledWith(LOG_LEVEL.INFO, "fac", ["arg1", "arg2"], {});
+    logger.to("fn1", target);
+    logger.to("fn2", target);
 
-	});
+    logger.close();
 
-	it("#getFacilities should return registered facilities", () => {
+    expect(target.close).toHaveBeenCalledTimes(2);
 
-		const logger = new Logger();
+  });
 
-		const facilityA = logger.facility("facA");
-		const facilityB = logger.facility("facB");
+  it("#facility should return facility wrapper", () => {
 
-		expect(logger.getAllFacilities()).toEqual({
-			facA: facilityA,
-			facB: facilityB
-		});
+    const logger = new Logger();
+    const target = mockTarget();
 
-	});
+    logger.to("trg", target);
 
-	it("#toConsole should assign ConsoleTarget with id of '__console__'", () => {
+    const facility = logger.facility("fac");
 
-		const logger = new Logger();
+    // Check facility instance
+    expect(facility).toBeInstanceOf(LoggerFacility);
 
-		logger.toConsole({
-			level: LOG_LEVEL.DEBUG,
-			colorize: true,
-		});
+    // Try to log something
+    facility.log(LOG_LEVEL.INFO, "arg1", "arg2");
 
-		expect(logger.getTarget("__console__")).toBeInstanceOf(ConsoleTarget);
+    expect(target.log).toHaveBeenCalledTimes(1);
+    expect(target.log).toHaveBeenLastCalledWith(LOG_LEVEL.INFO, "fac", ["arg1", "arg2"], {});
 
-	});
+  });
 
-	it("#toFile should assign FileTarget with id of filename", () => {
+  it("#getFacilities should return registered facilities", () => {
 
-		const logger = new Logger();
+    const logger = new Logger();
 
-		logger.toFile("test.log", {
-			level: LOG_LEVEL.DEBUG
-		});
+    const facilityA = logger.facility("facA");
+    const facilityB = logger.facility("facB");
 
-		expect(logger.getTarget("test.log")).toBeInstanceOf(FileTarget);
+    expect(logger.getAllFacilities()).toEqual({
+      facA: facilityA,
+      facB: facilityB
+    });
 
-	});
+  });
 
-	it("#toJsonFile should assign JsonTarget with id of filename", () => {
+  it("#toConsole should assign ConsoleTarget with id of '__console__'", () => {
 
-		const logger = new Logger();
+    const logger = new Logger();
 
-		logger.toJsonFile("test.json", {
-			level: LOG_LEVEL.DEBUG
-		});
+    logger.toConsole({
+      level: LOG_LEVEL.DEBUG,
+      colorize: true,
+    });
 
-		expect(logger.getTarget("test.json")).toBeInstanceOf(JsonFileTarget);
+    expect(logger.getTarget("__console__")).toBeInstanceOf(ConsoleTarget);
 
-	});
+  });
 
-	it("#toGrayLog should assign GraylogTarget with id of '__graylog__'", () => {
+  it("#toFile should assign FileTarget with id of filename", () => {
 
-		const logger = new Logger();
+    const logger = new Logger();
 
-		logger.toGrayLog({
-			level: LOG_LEVEL.DEBUG,
-			graylogHostname: "localhost"
-		});
+    logger.toFile("test.log", {
+      level: LOG_LEVEL.DEBUG
+    });
 
-		expect(logger.getTarget("__graylog__")).toBeInstanceOf(GraylogTarget);
+    expect(logger.getTarget("test.log")).toBeInstanceOf(FileTarget);
 
-	});
+  });
 
-	it("#log should log message and take first argument as log level", () => {
+  it("#toJsonFile should assign JsonTarget with id of filename", () => {
 
-		const mock = mockLoggerWithTarget();
+    const logger = new Logger();
 
-		mock.logger.log(LOG_LEVEL.INFO, "arg1", "arg2");
+    logger.toJsonFile("test.json", {
+      level: LOG_LEVEL.DEBUG
+    });
 
-		expect(mock.target.log).toHaveBeenLastCalledWith(LOG_LEVEL.INFO, null, ["arg1", "arg2"], {});
+    expect(logger.getTarget("test.json")).toBeInstanceOf(JsonFileTarget);
 
-	});
+  });
 
-	it("#debug should log message with DEBUG level", () => {
+  it("#toGrayLog should assign GraylogTarget with id of '__graylog__'", () => {
 
-		const mock = mockLoggerWithTarget();
+    const logger = new Logger();
 
-		mock.logger.debug("arg1", "arg2");
+    logger.toGrayLog({
+      level: LOG_LEVEL.DEBUG,
+      graylogHostname: "localhost"
+    });
 
-		expect(mock.target.log).toHaveBeenLastCalledWith(LOG_LEVEL.DEBUG, null, ["arg1", "arg2"], {});
+    expect(logger.getTarget("__graylog__")).toBeInstanceOf(GraylogTarget);
 
-	});
+  });
 
-	it("#info should log message with INFO level", () => {
+  it("#log should log message and take first argument as log level", () => {
 
-		const mock = mockLoggerWithTarget();
+    const mock = mockLoggerWithTarget();
 
-		mock.logger.info("arg1", "arg2");
+    mock.logger.log(LOG_LEVEL.INFO, "arg1", "arg2");
 
-		expect(mock.target.log).toHaveBeenLastCalledWith(LOG_LEVEL.INFO, null, ["arg1", "arg2"], {});
+    expect(mock.target.log).toHaveBeenLastCalledWith(LOG_LEVEL.INFO, null, ["arg1", "arg2"], {});
 
-	});
+  });
 
-	it("#notice should log message with NOTICE level", () => {
+  it("#debug should log message with DEBUG level", () => {
 
-		const mock = mockLoggerWithTarget();
+    const mock = mockLoggerWithTarget();
 
-		mock.logger.notice("arg1", "arg2");
+    mock.logger.debug("arg1", "arg2");
 
-		expect(mock.target.log).toHaveBeenLastCalledWith(LOG_LEVEL.NOTICE, null, ["arg1", "arg2"], {});
+    expect(mock.target.log).toHaveBeenLastCalledWith(LOG_LEVEL.DEBUG, null, ["arg1", "arg2"], {});
 
-	});
+  });
 
-	it("#warn should log message with WARN level", () => {
+  it("#info should log message with INFO level", () => {
 
-		const mock = mockLoggerWithTarget();
+    const mock = mockLoggerWithTarget();
 
-		mock.logger.warn("arg1", "arg2");
+    mock.logger.info("arg1", "arg2");
 
-		expect(mock.target.log).toHaveBeenLastCalledWith(LOG_LEVEL.WARN, null, ["arg1", "arg2"], {});
+    expect(mock.target.log).toHaveBeenLastCalledWith(LOG_LEVEL.INFO, null, ["arg1", "arg2"], {});
 
-	});
+  });
 
-	it("#error should log message with ERROR level", () => {
+  it("#notice should log message with NOTICE level", () => {
 
-		const mock = mockLoggerWithTarget();
+    const mock = mockLoggerWithTarget();
 
-		mock.logger.error("arg1", "arg2");
+    mock.logger.notice("arg1", "arg2");
 
-		expect(mock.target.log).toHaveBeenLastCalledWith(LOG_LEVEL.ERROR, null, ["arg1", "arg2"], {});
+    expect(mock.target.log).toHaveBeenLastCalledWith(LOG_LEVEL.NOTICE, null, ["arg1", "arg2"], {});
 
-	});
+  });
 
-	it("#crit should log message with CRITICAL level", () => {
+  it("#warn should log message with WARN level", () => {
 
-		const mock = mockLoggerWithTarget();
+    const mock = mockLoggerWithTarget();
 
-		mock.logger.crit("arg1", "arg2");
+    mock.logger.warn("arg1", "arg2");
 
-		expect(mock.target.log).toHaveBeenLastCalledWith(LOG_LEVEL.CRITICAL, null, ["arg1", "arg2"], {});
+    expect(mock.target.log).toHaveBeenLastCalledWith(LOG_LEVEL.WARN, null, ["arg1", "arg2"], {});
 
-	});
+  });
 
-	it("#alert should log message with ALERT level", () => {
+  it("#error should log message with ERROR level", () => {
 
-		const mock = mockLoggerWithTarget();
+    const mock = mockLoggerWithTarget();
 
-		mock.logger.alert("arg1", "arg2");
+    mock.logger.error("arg1", "arg2");
 
-		expect(mock.target.log).toHaveBeenLastCalledWith(LOG_LEVEL.ALERT, null, ["arg1", "arg2"], {});
+    expect(mock.target.log).toHaveBeenLastCalledWith(LOG_LEVEL.ERROR, null, ["arg1", "arg2"], {});
 
-	});
+  });
 
-	it("#emerg should log message with EMERGENCY level", () => {
+  it("#crit should log message with CRITICAL level", () => {
 
-		const mock = mockLoggerWithTarget();
+    const mock = mockLoggerWithTarget();
 
-		mock.logger.emerg("arg1", "arg2");
+    mock.logger.crit("arg1", "arg2");
 
-		expect(mock.target.log).toHaveBeenLastCalledWith(LOG_LEVEL.EMERGENCY, null, ["arg1", "arg2"], {});
+    expect(mock.target.log).toHaveBeenLastCalledWith(LOG_LEVEL.CRITICAL, null, ["arg1", "arg2"], {});
 
-	});
+  });
 
-	it("#panic should log message with EMERGENCY level", () => {
+  it("#alert should log message with ALERT level", () => {
 
-		const mock = mockLoggerWithTarget();
+    const mock = mockLoggerWithTarget();
 
-		mock.logger.panic("arg1", "arg2");
+    mock.logger.alert("arg1", "arg2");
 
-		expect(mock.target.log).toHaveBeenLastCalledWith(LOG_LEVEL.EMERGENCY, null, ["arg1", "arg2"], {});
+    expect(mock.target.log).toHaveBeenLastCalledWith(LOG_LEVEL.ALERT, null, ["arg1", "arg2"], {});
 
-	});
+  });
 
-	it("#setLevel should change log level", () => {
+  it("#emerg should log message with EMERGENCY level", () => {
 
-		const mock = mockLoggerWithTarget();
+    const mock = mockLoggerWithTarget();
 
-		mock.logger.setLevel(LOG_LEVEL.INFO);
+    mock.logger.emerg("arg1", "arg2");
 
-		mock.logger.debug("arg1", "arg2");
+    expect(mock.target.log).toHaveBeenLastCalledWith(LOG_LEVEL.EMERGENCY, null, ["arg1", "arg2"], {});
 
-		expect(mock.logger.getLevel()).toEqual(LOG_LEVEL.INFO);
-		expect(mock.target.log).toHaveBeenCalledTimes(0);
+  });
 
-	});
+  it("#panic should log message with EMERGENCY level", () => {
+
+    const mock = mockLoggerWithTarget();
+
+    mock.logger.panic("arg1", "arg2");
+
+    expect(mock.target.log).toHaveBeenLastCalledWith(LOG_LEVEL.EMERGENCY, null, ["arg1", "arg2"], {});
+
+  });
+
+  it("#setLevel should change log level", () => {
+
+    const mock = mockLoggerWithTarget();
+
+    mock.logger.setLevel(LOG_LEVEL.INFO);
+
+    mock.logger.debug("arg1", "arg2");
+
+    expect(mock.logger.getLevel()).toEqual(LOG_LEVEL.INFO);
+    expect(mock.target.log).toHaveBeenCalledTimes(0);
+
+  });
 
 });
