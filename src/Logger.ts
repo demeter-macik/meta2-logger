@@ -21,8 +21,18 @@ import { GraylogTarget, IGraylogTargetOptions } from "./GraylogTarget";
 export interface ILoggerConfig {
   level?: LOG_LEVEL;
   trace?: boolean;
-  filters?: string;
+  filter?: string;
 }
+
+/**
+ * Facility Filter
+ */
+interface IFacilityFilter {
+  /** Regular Expression */
+  re: RegExp,
+  /** Negate regular expression result */
+  negate: boolean
+};
 
 /**
  * Logger class
@@ -41,11 +51,11 @@ export class Logger implements ILogger {
   /** If to include callstack */
   protected trace: boolean;
 
-  /** Facilities filter */
-  protected filters?: RegExp[];
+  /** Facilities filters */
+  protected filters?: IFacilityFilter[];
 
-  /** Filtered facilities */
-  protected filteredFacilities: string[];
+  /** Filtered facilities names */
+  protected filteredFacilitiesNames: string[];
 
   /**
    * Logger constructor
@@ -56,15 +66,15 @@ export class Logger implements ILogger {
 
     this.level = config.level || LOG_LEVEL.DEBUG;
     this.trace = config.trace || false;
-    this.filters = this.parseFilters(config.filters);
+    this.filters = this.parseFilters(config.filter);
 
   }
 
   /**
-   * Parses facility filters
+   * Parses facility filter
    * @param filter 
    */
-  protected parseFilters(filters?: string): RegExp[] {
+  protected parseFilters(filters?: string): IFacilityFilter[] {
 
     if (!filters) {
       return [];
@@ -78,11 +88,16 @@ export class Logger implements ILogger {
           expression = ".*";
         }
 
+        let negate = false;
         if (/^-/.test(expression)) {
-          expression = `[^${expression.substring(1)}]`;
+          negate = true;
+          expression = expression.substring(1);
         }
 
-        return new RegExp(expression === "*" ? ".*" : expression);
+        return {
+          re: new RegExp(expression === "*" ? ".*" : expression),
+          negate
+        };
 
       } catch (error) {
 
@@ -91,42 +106,62 @@ export class Logger implements ILogger {
       }
 
     });
+
   }
 
-  protected filterFacilities() {
+  /**
+   * Returns filtered facilities names
+   */
+  protected filterFacilities(): string[] {
 
+    // Skip if filter wasn't provided
     if (this.filters.length === 0) {
       return [];
     }
 
     let names = Object.keys(this.facilities);
 
-    this.filters.forEach((regexpr) => {
+    this.filters.forEach((filter) => {
 
-      names = names.filter((name) => regexpr.test(name));
+      names = names.filter((name) => {
+
+        const match = filter.re.test(name);
+        return filter.negate === true ? !match : match;
+
+      });
 
     });
 
-    this.filteredFacilities = names;
+    return names;
 
   }
 
+  /**
+   * Sets facilities filter
+   * @param filters 
+   */
   public setFilters(filters: string) {
 
     this.filters = this.parseFilters(filters);
-    this.filterFacilities();
+    this.filteredFacilitiesNames = this.filterFacilities();
 
   }
 
+  /**
+   * Returns facilities filters
+   */
   public getFilters() {
 
     return this.filters;
 
   }
 
-  public getFilteredFacilities() {
+  /**
+   * Returns filtered facilities names
+   */
+  public getFilteredFacilitiesNames() {
 
-    return this.filteredFacilities;
+    return this.filteredFacilitiesNames;
 
   }
 
@@ -201,6 +236,13 @@ export class Logger implements ILogger {
   public _log(level: LOG_LEVEL, facility: string, args: any) {
 
     if (facility === null && level > this.level) return;
+
+    if (
+      this.filteredFacilitiesNames &&
+      this.filteredFacilitiesNames.length > 0 &&
+      !this.filteredFacilitiesNames.includes(facility)) {
+      return;
+    }
 
     let meta = {};
 
@@ -427,12 +469,8 @@ export class Logger implements ILogger {
     if (this.facilities[name])
       return this.facilities[name];
 
-    // return this.facilities[name] = new LoggerFacility(this, name, config);
-
     this.facilities[name] = new LoggerFacility(this, name, config);
-
-    this.filterFacilities();
-
+    this.filteredFacilitiesNames = this.filterFacilities();
     return this.facilities[name];
 
   }

@@ -8,7 +8,7 @@
 
 import {
   Logger, ILoggerTarget, LOG_LEVEL, LoggerFacility,
-  ConsoleTarget, FileTarget, JsonFileTarget, GraylogTarget
+  ConsoleTarget, FileTarget, JsonFileTarget, GraylogTarget, MemoryTarget
 } from "../src/index";
 
 describe("Logger class", () => {
@@ -50,31 +50,96 @@ describe("Logger class", () => {
 
   it("should construct with filters", () => {
 
-    const logger = new Logger({ filters: "*,name,-not" });
-    expect(logger.getFilters().toString()).toEqual("/.*/,/name/,/!(not)/");
+    const logger = new Logger({ filter: "name,-not" });
+    expect(logger.getFilters().map((f) => f.re).toString()).toEqual("/name/,/not/");
+    expect(logger.getFilters().map((f) => f.negate)).toEqual([false, true]);
 
   });
 
-  it.only("should filter facilities with matching pattern", () => {
+  it("should filter facilities with matching pattern", () => {
 
-    const logger = new Logger({ filters: "*,a" });
+    const logger = new Logger({ filter: "a" });
     logger.facility("a");
     logger.facility("b");
     logger.facility("c");
 
-    expect(logger.getFilteredFacilities()).toEqual(["a"]);
+    expect(logger.getFilteredFacilitiesNames()).toEqual(["a"]);
 
   });
 
-  it.only("should filter facilities negating pattern", () => {
+  it("should filter facilities negating pattern", () => {
 
-    const logger = new Logger({ filters: "*,-b" });
+    const logger = new Logger({ filter: "-b" });
     logger.facility("a");
     logger.facility("b");
     logger.facility("c");
 
-    expect(logger.getFilteredFacilities()).toEqual(["a", "c"]);
-    
+    expect(logger.getFilteredFacilitiesNames()).toEqual(["a", "c"]);
+
+  });
+
+  it("should filter facilities with unicode in the pattern", () => {
+
+    const logger = new Logger({ filter: "-é" });
+    logger.facility("á");
+    logger.facility("é");
+    logger.facility("í");
+
+    expect(logger.getFilteredFacilitiesNames()).toEqual(["á", "í"]);
+
+  });
+
+  it("should filter facilities with complex regular expression", () => {
+
+    const logger = new Logger({ filter: "-^Jo*" });
+
+    const target = new MemoryTarget({});
+
+    logger.to("memory", target);
+
+    const one = logger.facility("Adam");
+    const two = logger.facility("John");
+    const three = logger.facility("Jones");
+
+    expect(logger.getFilteredFacilitiesNames()).toEqual(["Adam"]);
+
+    logger.setFilters("-A+");
+
+    expect(logger.getFilteredFacilitiesNames()).toEqual(["John", "Jones"]);
+
+    logger.setFilters("Jo+");
+
+    expect(logger.getFilteredFacilitiesNames()).toEqual(["John", "Jones"]);
+
+    logger.setFilters("-^A,.o+,..h+");
+
+    expect(logger.getFilteredFacilitiesNames()).toEqual(["John"]);
+
+  });
+
+  it.only("should filter facilities with complex regular expression", () => {
+
+    const logger = new Logger({ filter: "-^Jo*" });
+    const target = new MemoryTarget({});
+    logger.to("memory", target);
+
+    const one = logger.facility("Adam");
+    const two = logger.facility("John");
+    const three = logger.facility("Jones");
+
+    logger.setFilters("John");
+
+    one.log(LOG_LEVEL.INFO, "1");
+    two.log(LOG_LEVEL.INFO, "2");
+    three.log(LOG_LEVEL.INFO, "3");
+
+    const messages = target.getMessages();
+
+    // should log only filtered facility
+    expect(messages.length).toEqual(1);
+    expect(messages[0].facility).toEqual("John");
+    expect(messages[0].message).toEqual("2");
+
   });
 
   it("should construct with configuration", () => {
